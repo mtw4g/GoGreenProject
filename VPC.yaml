@@ -1,0 +1,216 @@
+Resources:
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 192.168.0.0/16
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: gogreen-vpc
+
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: gogreen-igw
+
+  InternetGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      InternetGatewayId: !Ref InternetGateway
+      VpcId: !Ref VPC
+
+  Subnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: us-west-1a
+      CidrBlock: 192.168.1.0/24
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: public-subnet1
+
+  Subnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: us-west-1c
+      CidrBlock: 192.168.2.0/24
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: public-subnet2
+
+  Subnet3:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: us-west-1a
+      CidrBlock: 192.168.3.0/24
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: private-subnet1
+
+  Subnet4:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: us-west-1c
+      CidrBlock: 192.168.4.0/24
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: private-subnet2
+
+  RouteTable1:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: gogreen-public
+
+  RouteTable2:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: gogreen-private1
+
+  RouteTable3:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: gogreen-private2
+
+  DefaultPublicRoute:
+    Type: AWS::EC2::Route
+    DependsOn: InternetGatewayAttachment
+    Properties:
+      RouteTableId: !Ref RouteTable1
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+  PublicSubnet1RouteTable1Association:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref RouteTable1
+      SubnetId: !Ref Subnet1
+
+  PublicSubnet2RouteTable1Association:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref RouteTable1
+      SubnetId: !Ref Subnet2
+
+
+  EIP1:
+    Type: AWS::EC2::EIP
+    Properties:
+       Domain: vpc
+
+  NAT1:
+    Type: AWS::EC2::NatGateway
+    Properties:
+       AllocationId:
+          Fn::GetAtt:
+          - EIP1
+          - AllocationId
+       SubnetId:
+          Ref: Subnet3
+       Tags:
+       - Key: Name
+         Value: gogreen-ngw1
+ 
+  NatRoute1:
+    Type: AWS::EC2::Route
+    Properties:
+       RouteTableId:
+          Ref: RouteTable2
+       DestinationCidrBlock: 0.0.0.0/0
+       NatGatewayId:
+          Ref: NAT1
+
+  PrivateSubnet1RouteTable2Association:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref RouteTable2
+      SubnetId: !Ref Subnet3 
+
+  EIP2:
+    Type: AWS::EC2::EIP
+    Properties:
+       Domain: vpc
+
+  NAT2:
+    Type: AWS::EC2::NatGateway
+    Properties:
+       AllocationId:
+          Fn::GetAtt:
+          - EIP2
+          - AllocationId
+       SubnetId:
+          Ref: Subnet4
+       Tags:
+       - Key: Name
+         Value: gogreen-ngw2
+
+  NatRoute2:
+    Type: AWS::EC2::Route
+    Properties:
+       RouteTableId:
+          Ref: RouteTable3
+       DestinationCidrBlock: 0.0.0.0/0
+       NatGatewayId:
+          Ref: NAT2
+
+  PrivateSubnet2RouteTable3Association:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref RouteTable3
+      SubnetId: !Ref Subnet4
+
+  ELBSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: 80
+        ToPort: 80
+        CidrIp: 0.0.0.0/0
+      SecurityGroupEgress:
+      - IpProtocol: -1
+        CidrIp: 0.0.0.0/0
+      GroupName: "web-elb-sg"
+      GroupDescription: "web-elastic-load-balancing-sg"
+      VpcId: !Ref VPC
+
+  AppSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: 80
+        ToPort: 80
+        SourceSecurityGroupId:
+          Fn::GetAtt:
+          - ELBSecurityGroup
+          - GroupId
+      SecurityGroupEgress:
+      - IpProtocol: -1
+        CidrIp: 0.0.0.0/0
+      GroupName: "web-tier-sg"
+      GroupDescription: "web-tier-sg"
+      VpcId: !Ref VPC
+
+Outputs:
+  VPC:
+    Description: A reference to the created VPC
+    Value: !Ref VPC
